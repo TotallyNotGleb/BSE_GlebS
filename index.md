@@ -62,13 +62,17 @@ import pygame
 import requests
 import traceback
 
+# --- Pygame Setup ---
+pygame.init()
+screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+SCREEN_WIDTH, SCREEN_HEIGHT = screen.get_size()
+pygame.display.set_caption("Offline Text Adventure")
+
 # --- Game Configuration ---
-SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 600
 BUTTON_RADIUS = 80
 MARGIN = 40
 USE_OPENAI = True
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # secure way to load key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")    
 
 # --- Prompt Setup ---
 BasePrompt = (

@@ -55,17 +55,142 @@ Here's where you'll put images of your schematics. [Tinkercad](https://www.tinke
 # Code
 Here's where you'll put your code. The syntax below places it into a block of code. Follow the guide [here]([url](https://www.markdownguide.org/extended-syntax/)) to learn how to customize it to your project needs. 
 
-```c++
-void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
-  Serial.println("Hello World!");
-}
+```python
+import os
+import sys
+import pygame
+import requests
+import traceback
 
-void loop() {
-  // put your main code here, to run repeatedly:
+# --- Game Configuration ---
+SCREEN_WIDTH = 1024
+SCREEN_HEIGHT = 600
+BUTTON_RADIUS = 80
+MARGIN = 40
+USE_OPENAI = True
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # secure way to load key
 
-}
+# --- Prompt Setup ---
+BasePrompt = (
+    "You are an AI Game Master running a sword-and-sorcery fantasy adventure.\n"
+    "The player is on a quest involving danger, magic, and ancient ruins.\n"
+    "At each step: describe the scene briefly, list items, and offer 4 actions.\n"
+    "The player cannot die. Keep it short and terse."
+)
+SessionMessages = [{"role": "system", "content": BasePrompt}]
+
+# --- Pygame Initialization ---
+pygame.init()
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Text Adventure (Online)")
+font = pygame.font.SysFont("Arial", 24)
+label_font = pygame.font.SysFont("Arial", 32, bold=True)
+
+# --- UI Class ---
+class WrappedTextDisplay:
+    def __init__(self):
+        self.Lines = []
+
+    def SetText(self, text):
+        self.Lines = text.splitlines()
+        self.Refresh()
+
+    def AddText(self, text):
+        self.Lines.extend(text.splitlines())
+        self.Refresh()
+
+    def Refresh(self):
+        screen.fill((10, 10, 30))
+        y = 20
+        for line in self.Lines[-12:]:
+            rendered = font.render(line, True, (255, 255, 255))
+            screen.blit(rendered, (SCREEN_WIDTH // 2 - rendered.get_width() // 2, y))
+            y += 32
+        DrawButtons(ButtonLabels)
+        pygame.display.flip()
+
+# --- Buttons ---
+ButtonPositions = [
+    (MARGIN + BUTTON_RADIUS, MARGIN + BUTTON_RADIUS),
+    (SCREEN_WIDTH - MARGIN - BUTTON_RADIUS, MARGIN + BUTTON_RADIUS),
+    (MARGIN + BUTTON_RADIUS, SCREEN_HEIGHT - MARGIN - BUTTON_RADIUS),
+    (SCREEN_WIDTH - MARGIN - BUTTON_RADIUS, SCREEN_HEIGHT - MARGIN - BUTTON_RADIUS),
+]
+ButtonLabels = ["1", "2", "3", "4"]
+
+def DrawButtons(labels):
+    for i, (x, y) in enumerate(ButtonPositions):
+        pygame.draw.circle(screen, (100, 0, 0), (x, y), BUTTON_RADIUS)
+        pygame.draw.circle(screen, (255, 0, 0), (x, y), BUTTON_RADIUS, 4)
+        label = label_font.render(str(labels[i]), True, (255, 255, 255))
+        screen.blit(label, (x - label.get_width() // 2, y - label.get_height() // 2))
+
+# --- GPT Functions ---
+def MakePrompt(choice):
+    return SessionMessages + [{"role": "user", "content": f"PLAYER: {choice}"}]
+
+def RecordGameStep(choice, response):
+    SessionMessages.extend([
+        {"role": "user", "content": f"PLAYER: {choice}"},
+        {"role": "assistant", "content": response.strip()},
+    ])
+    del SessionMessages[1:-8]  # keep recent history only
+
+def GetCompletion(messages):
+    if not USE_OPENAI:
+        return f"FAKE RESPONSE for choice {messages[-1]['content']}"
+    try:
+        result = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            json={"model": "gpt-3.5-turbo", "messages": messages},
+            timeout=10
+        )
+        if result.status_code != 200:
+            return f"Error {result.status_code}: {result.text}"
+        return result.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"EXCEPTION: {str(e)}"
+
+# --- Input ---
+def GetButtonChoice():
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mx, my = pygame.mouse.get_pos()
+                for i, (bx, by) in enumerate(ButtonPositions):
+                    if (mx - bx) ** 2 + (my - by) ** 2 <= BUTTON_RADIUS ** 2:
+                        return i + 1
+
+# --- Game Logic ---
+Display = WrappedTextDisplay()
+
+def RunGameStep(ForcedChoice=None):
+    if ForcedChoice:
+        choice = ForcedChoice
+    else:
+        choice = GetButtonChoice()
+    Display.AddText(f"\nPLAYER: {choice}")
+    response = GetCompletion(MakePrompt(choice))
+    Display.SetText(response)
+    RecordGameStep(choice, response)
+
+# --- Main Loop ---
+try:
+    RunGameStep("New game")
+    while True:
+        RunGameStep()
+except Exception as e:
+    traceback.print_exception(e)
+    Display.SetText("Error occurred. Tap to reload.")
+    GetButtonChoice()
+    os.execl(sys.executable, sys.executable, *sys.argv)
 ```
 
 # Bill of Materials

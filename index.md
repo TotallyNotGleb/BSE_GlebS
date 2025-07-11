@@ -39,21 +39,18 @@ For your second milestone, explain what you've worked on since your previous mil
 
 # First Milestone
 
-**Don't forget to replace the text below with the embedding for your milestone video. Go to Youtube, click Share -> Embed, and copy and paste the code to replace what's below.**
-
 <iframe width="560" height="315" src="https://www.youtube.com/embed/CaCazFBhYKs" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 
-For your first milestone, describe what your project is and how you plan to build it. You can include:
-- An explanation about the different components of your project and how they will all integrate together
-- Technical progress you've made so far
-- Challenges you're facing and solving in your future milestones
-- What your plan is to complete your project
+``` For your first milestone, describe what your project is and how you plan to build it. You can include: ```
+``` - An explanation about the different components of your project and how they will all integrate together```
+``` - Technical progress you've made so far ```
+``` - Challenges you're facing and solving in your future milestones```
+```- What your plan is to complete your project ``` 
 
 # Schematics 
-Here's where you'll put images of your schematics. [Tinkercad](https://www.tinkercad.com/blog/official-guide-to-tinkercad-circuits) and [Fritzing](https://fritzing.org/learning/) are both great resoruces to create professional schematic diagrams, though BSE recommends Tinkercad becuase it can be done easily and for free in the browser. 
+``` Here's where you'll put images of your schematics. [Tinkercad](https://www.tinkercad.com/blog/official-guide-to-tinkercad-circuits) and [Fritzing](https://fritzing.org/learning/) are both great resoruces to create professional schematic diagrams, though BSE recommends Tinkercad becuase it can be done easily and for free in the browser. ```
 
-# Code
-Here's where you'll put your code. The syntax below places it into a block of code. Follow the guide [here]([url](https://www.markdownguide.org/extended-syntax/)) to learn how to customize it to your project needs. 
+# Code 
 
 ```python
 import os
@@ -72,45 +69,80 @@ pygame.display.set_caption("Offline Text Adventure")
 BUTTON_RADIUS = 80
 MARGIN = 40
 USE_OPENAI = True
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")    
+OPENAI_API_KEY = "sk..." #I hardcoded it because it worked better you can use a safer way by making a settings.toml file and adding GPTKEY = "sk...."
 
 # --- Prompt Setup ---
 BasePrompt = (
-    "You are an AI Game Master running a sword-and-sorcery fantasy adventure.\n"
-    "The player is on a quest involving danger, magic, and ancient ruins.\n"
-    "At each step: describe the scene briefly, list items, and offer 4 actions.\n"
-    "The player cannot die. Keep it short and terse."
+    "You are an AI Game Master running a sword-and-sorcery fantasy adventure.\\n"
+    "The player is on a quest involving danger, magic, and ancient ruins.\\n"
+    "At each step: describe the scene in 2-3 sentences, list items, and offer 4 actions.\\n"
+    "Sometimes, describe enemies. If combat begins, say 'roll initiative!' and describe the foe. Enemy has to make sense based on current setting."
+    "The player can only die in combat. Keep it short and terse."
 )
 SessionMessages = [{"role": "system", "content": BasePrompt}]
 
-# --- Pygame Initialization ---
-pygame.init()
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Text Adventure (Online)")
+# --- Fonts ---
 font = pygame.font.SysFont("Arial", 24)
 label_font = pygame.font.SysFont("Arial", 32, bold=True)
+
+# --- Player Stats ---
+PlayerStats = {
+    "Class": None,
+    "HP": 10,
+    "MP": 5,
+    "Inventory": [],
+    "SpellBook": []
+}
+
+InCombat = False
+CombatState = {
+    "EnemyName": "",
+    "EnemyHP": 0,
+    "EnemyAttack": 0
+}
+
+CurrentOptions = ["1", "2", "3", "4"]
 
 # --- UI Class ---
 class WrappedTextDisplay:
     def __init__(self):
-        self.Lines = []
+        self.line_offset = 0
+        self.lines = []
 
-    def SetText(self, text):
-        self.Lines = text.splitlines()
-        self.Refresh()
+    def WrapText(self, text, max_width):
+        wrapped_lines = []
+        for paragraph in text.splitlines():
+            words = paragraph.split()
+            current_line = ""
+            for word in words:
+                test_line = current_line + " " + word if current_line else word
+                if font.size(test_line)[0] <= max_width:
+                    current_line = test_line
+                else:
+                    wrapped_lines.append(current_line)
+                    current_line = word
+            if current_line:
+                wrapped_lines.append(current_line)
+        return wrapped_lines
 
     def AddText(self, text):
-        self.Lines.extend(text.splitlines())
+        self.lines.extend(self.WrapText(text, SCREEN_WIDTH - 40))
+        self.Refresh()
+
+    def SetText(self, text):
+        self.lines = self.WrapText(text, SCREEN_WIDTH - 40)
+        self.line_offset = 0
         self.Refresh()
 
     def Refresh(self):
         screen.fill((10, 10, 30))
-        y = 20
-        for line in self.Lines[-12:]:
-            rendered = font.render(line, True, (255, 255, 255))
-            screen.blit(rendered, (SCREEN_WIDTH // 2 - rendered.get_width() // 2, y))
-            y += 32
-        DrawButtons(ButtonLabels)
+        y = SCREEN_HEIGHT // 2 - len(self.lines) * 20
+        for line in self.lines[self.line_offset:self.line_offset + 15]:
+            text_surface = font.render(line, True, (255, 255, 255))
+            x = SCREEN_WIDTH // 2 - text_surface.get_width() // 2
+            screen.blit(text_surface, (x, y))
+            y += 40
+        DrawButtons(CurrentOptions)
         pygame.display.flip()
 
 # --- Buttons ---
@@ -138,7 +170,7 @@ def RecordGameStep(choice, response):
         {"role": "user", "content": f"PLAYER: {choice}"},
         {"role": "assistant", "content": response.strip()},
     ])
-    del SessionMessages[1:-8]  # keep recent history only
+    del SessionMessages[1:-8]
 
 def GetCompletion(messages):
     if not USE_OPENAI:
@@ -148,7 +180,7 @@ def GetCompletion(messages):
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
             json={"model": "gpt-3.5-turbo", "messages": messages},
-            timeout=10
+            timeout=20
         )
         if result.status_code != 200:
             return f"Error {result.status_code}: {result.text}"
@@ -176,12 +208,61 @@ def GetButtonChoice():
 Display = WrappedTextDisplay()
 
 def RunGameStep(ForcedChoice=None):
+    global PlayerStats, InCombat, CombatState
+
+    if PlayerStats["Class"] is None:
+        Display.SetText("Choose your class:\\n1: Fighter\\n2: Wizard\\n3: Warlock\\n4: Paladin")
+        class_choice = GetButtonChoice()
+        class_map = {1: "Fighter", 2: "Wizard", 3: "Warlock", 4: "Paladin"}
+        PlayerStats["Class"] = class_map.get(class_choice, "Fighter")
+
+        if PlayerStats["Class"] == "Wizard":
+            PlayerStats["HP"] = 6
+            PlayerStats["MP"] = 10
+            PlayerStats["SpellBook"] = ["Fireball", "Teleport", "Magic Shield"]
+        elif PlayerStats["Class"] == "Warlock":
+            PlayerStats["HP"] = 8
+            PlayerStats["MP"] = 6
+            PlayerStats["SpellBook"] = ["Hex", "Serpent Missile", "Eldritch Blast"]
+        elif PlayerStats["Class"] == "Paladin":
+            PlayerStats["HP"] = 10
+            PlayerStats["MP"] = 8
+            PlayerStats["SpellBook"] = ["Heal", "Smite", "Holy Shield"]
+        else:  # Fighter
+            PlayerStats["HP"] = 12
+            PlayerStats["MP"] = 2
+            PlayerStats["SpellBook"] = []
+
+        Display.SetText(
+            f"You are a {PlayerStats['Class']}!\\n"
+            f"HP: {PlayerStats['HP']}\\n"
+            f"MP: {PlayerStats['MP']}\\n"
+            f"Tap to begin..."
+        )
+        GetButtonChoice()
+        return
+
     if ForcedChoice:
         choice = ForcedChoice
     else:
         choice = GetButtonChoice()
-    Display.AddText(f"\nPLAYER: {choice}")
-    response = GetCompletion(MakePrompt(choice))
+
+    Display.AddText(f"\\nPLAYER: {choice}")
+    status = f"\\nClass: {PlayerStats['Class']}, HP: {PlayerStats['HP']}, MP: {PlayerStats['MP']}, Items: {', '.join(PlayerStats['Inventory']) or 'None'}"
+    prompt = MakePrompt(str(choice) + status)
+    response = GetCompletion(prompt)
+
+    if "roll initiative" in response.lower():
+        InCombat = True
+        match = re.search(r"A ([a-zA-Z]+) appears", response, re.IGNORECASE)
+        enemy_name = match.group(1).capitalize() if match else "Unknown Foe"
+        CombatState.update({
+            "EnemyName": enemy_name,
+            "EnemyHP": 10,
+            "EnemyAttack": 3
+        })
+        response += f"\\n\\n[Enemy: {CombatState['EnemyName']} | HP: {CombatState['EnemyHP']} | ATK: {CombatState['EnemyAttack']}]"
+
     Display.SetText(response)
     RecordGameStep(choice, response)
 
@@ -198,8 +279,6 @@ except Exception as e:
 ```
 
 # Bill of Materials
-Here's where you'll list the parts in your project. To add more rows, just copy and paste the example rows below.
-Don't forget to place the link of where to buy each component inside the quotation marks in the corresponding row after href =. Follow the guide [here]([url](https://www.markdownguide.org/extended-syntax/)) to learn how to customize this to your project needs. 
 
 | **Part** | **Note** | **Price** | **Link** |
 |:--:|:--:|:--:|:--:|
@@ -214,4 +293,3 @@ One of the best parts about Github is that you can view how other people set up 
 - [Example 2](https://sviatil0.github.io/Sviatoslav_BSE/)
 - [Example 3](https://arneshkumar.github.io/arneshbluestamp/)
 
-To watch the BSE tutorial on how to create a portfolio, click here.

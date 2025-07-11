@@ -70,7 +70,7 @@ BUTTON_RADIUS = 80
 MARGIN = 40
 USE_OPENAI = True
 OPENAI_API_KEY = "sk..." #I hardcoded it because it worked better you can use a safer way by making a settings.toml file
-and adding GPTKEY = "sk...."
+#and adding GPTKEY = "sk...."
 
 # --- Prompt Setup ---
 BasePrompt = (
